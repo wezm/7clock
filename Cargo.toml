@@ -10,4 +10,5 @@ path = "src/main.rs"
 
 
 [dependencies]
+crossterm = "0.25.0"
 time = { version = "0.3.13", features = ["local-offset", "formatting", "macros"] }
