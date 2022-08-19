@@ -1,0 +1,13 @@
+[package]
+name = "seven-clock"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[[bin]]
+name = "7clock"
+path = "src/main.rs"
+
+
+[dependencies]
+time = { version = "0.3.13", features = ["local-offset", "formatting", "macros"] }
