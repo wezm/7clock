@@ -1,16 +1,13 @@
 use std::fmt::{Display, Formatter};
-use std::io::stdout;
+use std::io::{stdout, Stdout, Write};
 use std::process::ExitCode;
 
-use crossterm::event::DisableMouseCapture;
-use crossterm::event::EnableMouseCapture;
+use crossterm::cursor::{MoveToColumn, MoveToRow};
 use crossterm::event::{poll, Event, KeyCode};
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
-use crossterm::{
-    cursor, event, execute,
-    style::{Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor},
-    ErrorKind, ExecutableCommand,
+use crossterm::terminal::{
+    disable_raw_mode, enable_raw_mode, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen,
 };
+use crossterm::{cursor, event, execute, style::Print, terminal, ErrorKind};
 use time::{format_description::FormatItem, macros::format_description, OffsetDateTime};
 
 const TWELVE_HOUR_HMS: &[FormatItem] =
@@ -54,9 +51,9 @@ fn try_main() -> Result<(), Error> {
     enable_raw_mode()?;
 
     let mut stdout = stdout();
-    execute!(stdout, EnableMouseCapture)?;
+    execute!(stdout, EnterAlternateScreen)?;
     main_loop(options.format())?;
-    execute!(stdout, DisableMouseCapture)?;
+    execute!(stdout, LeaveAlternateScreen)?;
 
     disable_raw_mode()?;
 
@@ -64,42 +61,82 @@ fn try_main() -> Result<(), Error> {
 }
 
 fn main_loop(format: &[FormatItem]) -> Result<(), Error> {
+    let mut stdout = stdout();
+    let (mut columns, mut rows) = terminal::size()?;
+
+    // Clear the screen, move to middle row, and do the initial render
+    init_screen(&mut stdout, columns, rows)?;
+    render_time(&mut stdout, format, columns)?;
+
     loop {
         // Wait up to 1s for another event
         if poll(std::time::Duration::from_millis(1_000))? {
             // It's guaranteed that read() won't block if `poll` returns `Ok(true)`
-            let event = event::read()?;
-
-            println!("Event::{:?}\r", event);
-
-            if event == Event::Key(KeyCode::Char('c').into()) {
-                println!("Cursor position: {:?}\r", cursor::position());
-            }
-
-            if event == Event::Key(KeyCode::Esc.into()) {
-                break;
+            match event::read()? {
+                Event::Resize(new_cols, new_rows) => {
+                    columns = new_cols;
+                    rows = new_rows;
+                    init_screen(&mut stdout, columns, rows)?;
+                    render_time(&mut stdout, format, columns)?;
+                }
+                Event::Key(key_event)
+                    if key_event == KeyCode::Esc.into()
+                        || key_event == KeyCode::Char('q').into() =>
+                {
+                    break;
+                }
+                _ => {}
             }
         } else {
             // Timeout expired, no event for 1s
-            let now = OffsetDateTime::now_local().unwrap();
-            let time_str = now.format(format).unwrap();
-            let time = format!("{}", segmentify(&time_str));
-            println!("{}", time);
+            render_time(&mut stdout, format, columns)?;
         }
     }
 
+    execute!(stdout, cursor::Show)?;
+
     Ok(())
 }
-fn segmentify(s: &str) -> String {
-    s.chars()
-        .map(|ch| {
-            if ch.is_ascii_digit() {
-                std::char::from_u32(0x1FBC0 + ch as u32).unwrap()
-            } else {
-                ch
-            }
-        })
-        .collect()
+
+fn render_time(stdout: &mut Stdout, format: &[FormatItem], columns: u16) -> Result<(), Error> {
+    let now = OffsetDateTime::now_local().unwrap();
+    let time_str = now.format(format).unwrap();
+    let (time, time_len) = segmentify(&time_str);
+
+    execute!(
+        stdout,
+        Clear(ClearType::CurrentLine),
+        MoveToColumn((columns / 2) - (time_len as u16 / 2)),
+        Print(time)
+    )?;
+    Ok(())
+}
+
+fn init_screen<S: Write>(screen: &mut S, _cols: u16, rows: u16) -> Result<(), Error> {
+    execute!(
+        screen,
+        Clear(ClearType::All),
+        MoveToRow(rows / 2),
+        cursor::Hide
+    )?;
+    Ok(())
+}
+
+fn segmentify(s: &str) -> (String, usize) {
+    let mut len = 0;
+    (
+        s.chars()
+            .map(|ch| {
+                len += 1;
+                if ch.is_ascii_digit() {
+                    std::char::from_u32(0x1FBC0 + ch as u32).unwrap()
+                } else {
+                    ch
+                }
+            })
+            .collect::<String>(),
+        len,
+    )
 }
 
 fn parse_args() -> Result<Options, Error> {
