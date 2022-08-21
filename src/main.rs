@@ -106,7 +106,7 @@ fn render_time(stdout: &mut Stdout, format: &[FormatItem], columns: u16) -> Resu
     execute!(
         stdout,
         Clear(ClearType::CurrentLine),
-        MoveToColumn((columns / 2) - (time_len as u16 / 2)),
+        MoveToColumn((columns / 2).saturating_sub(time_len as u16 / 2)),
         Print(time)
     )?;
     Ok(())
