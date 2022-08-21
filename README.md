@@ -1,7 +1,7 @@
 Seven-segment clock (`7clock`)
 ==============================
 
-![Video of 7clock](7clock.mp4)
+https://user-images.githubusercontent.com/21787/185777971-66164a3f-26e6-4ee7-b6e5-f8fa371eb00a.mp4
 
 This is a clock for terminals that uses the Unicode seven-segment display characters added in Unicode 13.0.
 It runs on most commonly used operating systems, including BSD, Linux, macOS, and Windows.
