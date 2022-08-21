@@ -52,7 +52,7 @@ fn try_main() -> Result<(), Error> {
 
     let mut stdout = stdout();
     execute!(stdout, EnterAlternateScreen)?;
-    main_loop(options.format())?;
+    main_loop(&options)?;
     execute!(stdout, LeaveAlternateScreen)?;
 
     disable_raw_mode()?;
@@ -60,9 +60,10 @@ fn try_main() -> Result<(), Error> {
     Ok(())
 }
 
-fn main_loop(format: &[FormatItem]) -> Result<(), Error> {
+fn main_loop(options: &Options) -> Result<(), Error> {
     let mut stdout = stdout();
     let (mut columns, mut rows) = terminal::size()?;
+    let format = options.format();
 
     // Clear the screen, move to middle row, and do the initial render
     init_screen(&mut stdout, columns, rows)?;
@@ -70,7 +71,7 @@ fn main_loop(format: &[FormatItem]) -> Result<(), Error> {
 
     loop {
         // Wait up to 1s for another event
-        if poll(std::time::Duration::from_millis(1_000))? {
+        if poll(options.poll_interval())? {
             // It's guaranteed that read() won't block if `poll` returns `Ok(true)`
             match event::read()? {
                 Event::Resize(new_cols, new_rows) => {
@@ -201,6 +202,11 @@ impl Options {
             (false, true) => TWELVE_HOUR_HMS,
             (false, false) => TWELVE_HOUR_HM,
         }
+    }
+
+    fn poll_interval(&self) -> std::time::Duration {
+        let interval = if self.show_seconds { 500 } else { 1000 };
+        std::time::Duration::from_millis(interval)
     }
 }
 
