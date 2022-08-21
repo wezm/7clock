@@ -157,7 +157,40 @@ fn parse_args() -> Result<Options, Error> {
 }
 
 fn usage() {
-    eprintln!(r#"Usage: 7clock"#)
+    eprintln!(
+        "{}
+
+{bin} displays a clock using seven-segment characters.
+
+USAGE:
+    {bin} [OPTIONS]
+
+OPTIONS:
+    -h, --help
+            Prints this help information
+
+    -24
+            Use 24-hour time
+
+    --seconds
+            Include seconds
+
+AUTHOR
+    Wesley Moore <wes@wezm.net>
+
+SEE ALSO
+    https://github.com/wezm/7clock  Source code and issue tracker.",
+        version_string(),
+        bin = "7clock"
+    );
+}
+
+pub fn version_string() -> String {
+    format!(
+        "{} version {}",
+        env!("CARGO_PKG_NAME"),
+        env!("CARGO_PKG_VERSION")
+    )
 }
 
 impl Options {
