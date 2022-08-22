@@ -27,6 +27,7 @@ Run the binary to get the default 12-hour clock without seconds. The following
 options are supported:
 
 * `-24` — use 24-hour time
+* `--colour` — set the colour of the clock (see `--help` for more info)
 * `--seconds` — display seconds
 
 Credits

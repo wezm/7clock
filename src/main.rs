@@ -4,6 +4,7 @@ use std::process::ExitCode;
 
 use crossterm::cursor::{MoveToColumn, MoveToRow};
 use crossterm::event::{poll, Event, KeyCode};
+use crossterm::style::{Color, SetForegroundColor};
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen,
 };
@@ -20,12 +21,14 @@ const TWENTY_FOUR_HOUR_HM: &[FormatItem] = format_description!("[hour]:[minute]"
 struct Options {
     twenty_four_hour: bool,
     show_seconds: bool,
+    colour: Option<Color>,
 }
 
 #[derive(Debug)]
 enum Error {
     ExitCode(ExitCode),
     Usage(String),
+    Message(String),
     Terminal(crossterm::ErrorKind),
 }
 
@@ -36,6 +39,10 @@ fn main() -> ExitCode {
         Err(Error::Usage(message)) => {
             eprintln!("{}", message);
             usage();
+            ExitCode::from(2)
+        }
+        Err(Error::Message(message)) => {
+            eprintln!("{}", message);
             ExitCode::from(2)
         }
         Err(err) => {
@@ -66,7 +73,7 @@ fn main_loop(options: &Options) -> Result<(), Error> {
     let format = options.format();
 
     // Clear the screen, move to middle row, and do the initial render
-    init_screen(&mut stdout, columns, rows)?;
+    init_screen(&mut stdout, columns, rows, options.colour)?;
     render_time(&mut stdout, format, columns)?;
 
     loop {
@@ -77,7 +84,7 @@ fn main_loop(options: &Options) -> Result<(), Error> {
                 Event::Resize(new_cols, new_rows) => {
                     columns = new_cols;
                     rows = new_rows;
-                    init_screen(&mut stdout, columns, rows)?;
+                    init_screen(&mut stdout, columns, rows, options.colour)?;
                     render_time(&mut stdout, format, columns)?;
                 }
                 Event::Key(key_event)
@@ -94,7 +101,7 @@ fn main_loop(options: &Options) -> Result<(), Error> {
         }
     }
 
-    execute!(stdout, cursor::Show)?;
+    execute!(stdout, cursor::Show, SetForegroundColor(Color::Reset))?;
 
     Ok(())
 }
@@ -113,13 +120,28 @@ fn render_time(stdout: &mut Stdout, format: &[FormatItem], columns: u16) -> Resu
     Ok(())
 }
 
-fn init_screen<S: Write>(screen: &mut S, _cols: u16, rows: u16) -> Result<(), Error> {
-    execute!(
-        screen,
-        Clear(ClearType::All),
-        MoveToRow(rows / 2),
-        cursor::Hide
-    )?;
+fn init_screen<S: Write>(
+    screen: &mut S,
+    _cols: u16,
+    rows: u16,
+    colour: Option<Color>,
+) -> Result<(), Error> {
+    if let Some(colour) = colour {
+        execute!(
+            screen,
+            Clear(ClearType::All),
+            MoveToRow(rows / 2),
+            cursor::Hide,
+            SetForegroundColor(colour)
+        )?;
+    } else {
+        execute!(
+            screen,
+            Clear(ClearType::All),
+            MoveToRow(rows / 2),
+            cursor::Hide
+        )?;
+    }
     Ok(())
 }
 
@@ -142,19 +164,47 @@ fn segmentify(s: &str) -> (String, usize) {
 
 fn parse_args() -> Result<Options, Error> {
     let mut options = Options::default();
-    for arg in std::env::args().skip(1) {
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
         match arg.as_str() {
             "-h" | "--help" => {
                 usage();
                 return Err(Error::ExitCode(ExitCode::SUCCESS));
             }
             "-24" => options.twenty_four_hour = true,
+            "-c" | "--color" | "--colour" => {
+                options.colour =
+                    Some(parse_colour(&args.next().ok_or_else(|| {
+                        Error::Usage("--colour requires an argument".into())
+                    })?)?);
+            }
             "--seconds" => options.show_seconds = true,
             otherwise => return Err(Error::Usage(format!("unknown option: '{}'", otherwise))),
         }
     }
 
     Ok(options)
+}
+
+fn parse_colour(s: &str) -> Result<Color, Error> {
+    if s.starts_with('#') {
+        parse_hex(&s[1..])
+    } else {
+        Color::try_from(s).map_err(|()| Error::Message(format!("unable to parse colour: '{}'", s)))
+    }
+}
+
+fn parse_hex(hex: &str) -> Result<Color, Error> {
+    if hex.len() != 6 {
+        return Err(Error::Message(format!("invalid colour: '#{}'", hex)));
+    }
+    let r = u8::from_str_radix(&hex[0..2], 16).ok();
+    let g = u8::from_str_radix(&hex[2..4], 16).ok();
+    let b = u8::from_str_radix(&hex[4..6], 16).ok();
+    match (r, g, b) {
+        (Some(r), Some(g), Some(b)) => Ok(Color::from((r, g, b))),
+        _ => Err(Error::Message(format!("invalid colour: '#{}'", hex))),
+    }
 }
 
 fn usage() {
@@ -168,13 +218,19 @@ USAGE:
 
 OPTIONS:
     -h, --help
-            Prints this help information
+            Prints this help information.
 
     -24
-            Use 24-hour time
+            Use 24-hour time.
+
+    -c, --color, --colour COLOUR
+            Set the colour of the clock.
+            COLOUR can be an RGB hex colour (#RRGGBB) or one of the eight
+            standard colour names: black, red, green, yellow, blue, magenta, cyan,
+            or white.
 
     --seconds
-            Include seconds
+            Include seconds.
 
 AUTHOR
     Wesley Moore <wes@wezm.net>
@@ -215,6 +271,7 @@ impl Default for Options {
         Options {
             twenty_four_hour: false,
             show_seconds: false,
+            colour: None,
         }
     }
 }
@@ -224,6 +281,7 @@ impl Display for Error {
         match self {
             Error::ExitCode(_code) => write!(f, "exit code"),
             Error::Usage(message) => write!(f, "usage error: {message}"),
+            Error::Message(message) => write!(f, "error: {message}"),
             Error::Terminal(kind) => write!(f, "terminal error: {kind}"),
         }
     }
