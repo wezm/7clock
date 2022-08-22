@@ -9,6 +9,8 @@ It runs on most commonly used operating systems, including BSD, Linux, macOS, an
 You need to have a font installed that has glyphs for the seven-segment display characters. I use
 [PragmataPro](https://fsd.it/shop/fonts/pragmatapro/). Another option is [Iosevka](https://typeof.net/Iosevka/).
 
+**Note:** It doesn't actually cycle through colours when it's running, that was just for demonstration in the video.
+
 Building
 --------
 
